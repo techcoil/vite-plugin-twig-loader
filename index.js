@@ -1,8 +1,9 @@
 // file system
-const fs = require('fs');
+const { readFileSync } = require('fs');
 const { extname } = require('path');
 // render functions
 const { retrieveOptions, configureTwig, renderTemplate } = require('./tasks');
+let viteLoaderConfigured = false;
 
 /**
  * @param {import('.').Options} options
@@ -33,13 +34,27 @@ module.exports = (options) => {
     async load(path) {
       if (extname(path) !== '.twig') return;
       const twig = await renderTemplate(path, { ...globals }, settings);
-      const input = fs.readFileSync(path, 'utf8');
-
+      const input = readFileSync(path, 'utf8');
+      console.log('configured vite from twig loader');
+      let  configurationCode = '';
+      if(!viteLoaderConfigured) {
+        configurationCode =  `
+        console.log('configuring vite');
+        ${Object.entries(filters || {}).map(([name, filter]) => `Twig.extendFilter('${name}', ${filter.toString()});`).join('\n')}
+        `;
+        viteLoaderConfigured = true;
+      }
       return `
+        import Twig from 'twig';
+
+        ${configurationCode}
+
         export const path = ${JSON.stringify(path)};
         export const ctx = ${JSON.stringify(input)};
         export const globals = ${JSON.stringify({ ...globals })};
         export const settings = ${JSON.stringify(settings)};
+
+        export const render = (data) => Twig.twig({data: ctx}).render(data);
 
         export default ${JSON.stringify(twig)};
       `;
